@@ -3,3 +3,6 @@ flask-cors
 geopandas
 networkx
 shapely
+fiona 
+gunicorn
+pyproj
