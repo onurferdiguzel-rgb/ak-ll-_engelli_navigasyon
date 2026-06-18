@@ -192,9 +192,9 @@ HTML = """
 
 /* popup küçültme - transform YOK, çünkü popup kayboluyordu */
 .leaflet-popup-content{
-    margin:4px 6px !important;
-    font-size:11px !important;
-    line-height:1.15 !important;
+    margin:1px 3px !important;
+    font-size:8px !important;
+    line-height:1 !important;
     min-width:90px !important;
 }
 
@@ -388,8 +388,8 @@ map.on('click', function(e){
             }
 
             popup = L.popup({
-                maxWidth:140,
-                minWidth:90,
+                maxWidth:90,
+                minWidth:40,
                 autoPan:true
             })
             .setLatLng(l1[Math.floor(l1.length/2)])

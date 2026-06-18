@@ -31,6 +31,62 @@ def haversine(a, b):
 
     x = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
     return 2 * R * math.asin(math.sqrt(x))
+# =========================
+# YÖN TARİFLERİ
+# =========================
+def bearing(a, b):
+    return math.degrees(
+        math.atan2(
+            b[1] - a[1],
+            b[0] - a[0]
+        )
+    )
+
+def generate_directions(path):
+
+    if len(path) < 3:
+        return ["Varış noktasına ulaştınız"]
+
+    directions = []
+    segment_dist = 0
+
+    for i in range(1, len(path)-1):
+
+        segment_dist += haversine(path[i-1], path[i])
+
+        b1 = bearing(path[i-1], path[i])
+        b2 = bearing(path[i], path[i+1])
+
+        angle = b2 - b1
+
+        while angle > 180:
+            angle -= 360
+
+        while angle < -180:
+            angle += 360
+
+        if abs(angle) > 35:
+
+            directions.append(
+                f"{round(segment_dist)} metre düz ilerle"
+            )
+
+            if angle > 0:
+                directions.append("Sağa dön")
+            else:
+                directions.append("Sola dön")
+
+            segment_dist = 0
+
+    segment_dist += haversine(path[-2], path[-1])
+
+    directions.append(
+        f"{round(segment_dist)} metre düz ilerle"
+    )
+
+    directions.append("Varış noktasına ulaştınız")
+
+    return directions
 
 # =========================
 # GRAPH
@@ -107,11 +163,12 @@ def path_distance(path):
 # ROUTE
 # =========================
 def shortest_routes(start, end):
+
     if not is_valid(start):
-        return "outside", None, None, None, None
+        return "outside", None, None, None, None, None
 
     if not is_valid(end):
-        return "outside", None, None, None, None
+        return "outside", None, None, None, None, None
 
     temp_G = G.copy()
 
@@ -119,10 +176,22 @@ def shortest_routes(start, end):
     e_snap = snap_and_insert(temp_G, end)
 
     try:
-        paths = list(islice(nx.shortest_simple_paths(temp_G, s_snap, e_snap, weight="weight"), 2))
+
+        paths = list(
+            islice(
+                nx.shortest_simple_paths(
+                    temp_G,
+                    s_snap,
+                    e_snap,
+                    weight="weight"
+                ),
+                2
+            )
+        )
 
         path1 = paths[0]
         dist1 = path_distance(path1)
+        directions1 = generate_directions(path1)
 
         path2 = None
         dist2 = None
@@ -131,10 +200,10 @@ def shortest_routes(start, end):
             path2 = paths[1]
             dist2 = path_distance(path2)
 
-        return "ok", path1, dist1, path2, dist2
+        return "ok", path1, dist1, path2, dist2, directions1
 
     except:
-        return "fail", None, None, None, None
+        return "fail", None, None, None, None, None
 
 # =========================
 # FLASK
@@ -192,9 +261,9 @@ HTML = """
 
 /* popup küçültme - transform YOK, çünkü popup kayboluyordu */
 .leaflet-popup-content{
-    margin:4px 6px !important;
-    font-size:11px !important;
-    line-height:1.15 !important;
+    margin:1px 3px !important;
+    font-size:8px !important;
+    line-height:1 !important;
     min-width:90px !important;
 }
 
@@ -386,10 +455,19 @@ map.on('click', function(e){
             } else {
                 popupText += "<br>2. rota bulunamadı";
             }
+                popupText += "<hr>";
+
+if(d.directions){
+
+    d.directions.forEach(function(x){
+        popupText += x + "<br>";
+    });
+
+}
 
             popup = L.popup({
-                maxWidth:140,
-                minWidth:90,
+                maxWidth:90,
+                minWidth:40,
                 autoPan:true
             })
             .setLatLng(l1[Math.floor(l1.length/2)])
@@ -414,19 +492,24 @@ def home():
 
 @app.route("/route")
 def route():
+
     sx = float(request.args.get("sx"))
     sy = float(request.args.get("sy"))
     ex = float(request.args.get("ex"))
     ey = float(request.args.get("ey"))
 
-    status, path1, dist1, path2, dist2 = shortest_routes((sx,sy),(ex,ey))
+    status, path1, dist1, path2, dist2, directions = shortest_routes(
+        (sx, sy),
+        (ex, ey)
+    )
 
     return jsonify({
         "status": status,
         "path": path1,
         "distance": dist1,
         "path2": path2,
-        "distance2": dist2
+        "distance2": dist2,
+        "directions": directions
     })
 
 @app.route("/geojson")

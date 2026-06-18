@@ -43,6 +43,7 @@ def add_line(line):
     for i in range(len(coords)-1):
         a = coords[i]
         b = coords[i+1]
+
         G.add_edge(a, b, weight=haversine(a, b))
         edges_list.append((a, b))
 
@@ -52,6 +53,7 @@ for geom in gdf.geometry:
 
     if geom.geom_type == "LineString":
         add_line(geom)
+
     elif geom.geom_type == "MultiLineString":
         for line in geom:
             add_line(line)
@@ -70,6 +72,7 @@ def is_valid(p):
 # SNAP + EDGE SPLIT
 # =========================
 def snap_and_insert(graph, p):
+
     point = Point(p)
     nearest_line = None
     min_dist = float("inf")
@@ -107,6 +110,7 @@ def path_distance(path):
 # ROUTE
 # =========================
 def shortest_routes(start, end):
+
     if not is_valid(start):
         return "outside", None, None, None, None
 
@@ -146,74 +150,11 @@ HTML = """
 <html>
 <head>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-
-<style>
-#map{
-    height:600px;
-}
-
-/* Rota kontrol butonları */
-.route-control{
-    background:white;
-    padding:2px;
-    border-radius:4px;
-    box-shadow:0 1px 3px rgba(0,0,0,0.25);
-}
-
-.route-control button{
-    display:block;
-    width:48px;
-    padding:1px 2px;
-    margin-bottom:2px;
-    font-size:7px;
-    cursor:pointer;
-}
-
-.route-control button:last-child{
-    margin-bottom:0;
-}
-
-/* + / - zoom küçültme */
-.leaflet-control-zoom{
-    transform:scale(0.40);
-    transform-origin:top left;
-}
-
-.leaflet-control-zoom a{
-    width:18px !important;
-    height:18px !important;
-    line-height:18px !important;
-    font-size:12px !important;
-}
-
-.leaflet-bar{
-    font-size:12px !important;
-}
-
-/* popup küçültme - transform YOK, çünkü popup kayboluyordu */
-.leaflet-popup-content{
-    margin:4px 6px !important;
-    font-size:11px !important;
-    line-height:1.15 !important;
-    min-width:90px !important;
-}
-
-.leaflet-popup-content-wrapper{
-    padding:1px !important;
-    border-radius:6px !important;
-}
-
-.leaflet-popup-tip{
-    width:7px !important;
-    height:7px !important;
-}
-</style>
-
+<style>#map{height:600px}</style>
 </head>
 <body>
 
 <h3>Engelli Navigasyon Sistemi</h3>
-
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -221,28 +162,6 @@ HTML = """
 <script>
 
 var map = L.map('map').setView([39.75,37.01],13);
-
-var RouteControl = L.Control.extend({
-    options: {
-        position: 'topright'
-    },
-
-    onAdd: function(map){
-        var div = L.DomUtil.create('div', 'route-control');
-
-        div.innerHTML = `
-            <button onclick="toggleRoute1()">1. Rota</button>
-            <button onclick="toggleRoute2()">2. Rota</button>
-        `;
-
-        L.DomEvent.disableClickPropagation(div);
-        L.DomEvent.disableScrollPropagation(div);
-
-        return div;
-    }
-});
-
-map.addControl(new RouteControl());
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
@@ -252,22 +171,14 @@ let line1 = null;
 let line2 = null;
 let popup = null;
 
-let lastRoute1 = null;
-let lastRoute2 = null;
-let route1Visible = true;
-let route2Visible = true;
-
 fetch("/geojson")
 .then(r=>r.json())
 .then(d=>{
-    L.geoJSON(d,{
-        color:"red",
-        weight:1,
-        opacity:0.8
-    }).addTo(map);
+    L.geoJSON(d,{color:"red"}).addTo(map);
 });
 
 function clearAll(){
+
     markers.forEach(m => map.removeLayer(m));
     markers = [];
 
@@ -286,49 +197,7 @@ function clearAll(){
         popup = null;
     }
 
-    lastRoute1 = null;
-    lastRoute2 = null;
-    route1Visible = true;
-    route2Visible = true;
-
     pts = [];
-}
-
-function toggleRoute1(){
-    if(!lastRoute1) return;
-
-    if(route1Visible){
-        if(line1){
-            map.removeLayer(line1);
-            line1 = null;
-        }
-        route1Visible = false;
-    } else {
-        line1 = L.polyline(lastRoute1,{
-            color:"blue",
-            weight:3
-        }).addTo(map);
-        route1Visible = true;
-    }
-}
-
-function toggleRoute2(){
-    if(!lastRoute2) return;
-
-    if(route2Visible){
-        if(line2){
-            map.removeLayer(line2);
-            line2 = null;
-        }
-        route2Visible = false;
-    } else {
-        line2 = L.polyline(lastRoute2,{
-            color:"green",
-            weight:2,
-            dashArray:"8,8"
-        }).addTo(map);
-        route2Visible = true;
-    }
 }
 
 map.on('click', function(e){
@@ -360,12 +229,9 @@ map.on('click', function(e){
 
             clearAll();
 
-            lastRoute1 = l1;
-            route1Visible = true;
-
             line1 = L.polyline(l1,{
                 color:"blue",
-                weight:3
+                weight:4
             }).addTo(map);
 
             let popupText = "1. rota: " + Math.round(d.distance) + " metre";
@@ -373,12 +239,9 @@ map.on('click', function(e){
             if(d.path2){
                 let l2 = d.path2.map(p=>[p[1],p[0]]);
 
-                lastRoute2 = l2;
-                route2Visible = true;
-
                 line2 = L.polyline(l2,{
                     color:"green",
-                    weight:2,
+                    weight:4,
                     dashArray:"8,8"
                 }).addTo(map);
 
@@ -387,14 +250,10 @@ map.on('click', function(e){
                 popupText += "<br>2. rota bulunamadı";
             }
 
-            popup = L.popup({
-                maxWidth:140,
-                minWidth:90,
-                autoPan:true
-            })
-            .setLatLng(l1[Math.floor(l1.length/2)])
-            .setContent(popupText)
-            .openOn(map);
+            popup = L.popup()
+                .setLatLng(l1[Math.floor(l1.length/2)])
+                .setContent(popupText)
+                .openOn(map);
 
         });
 

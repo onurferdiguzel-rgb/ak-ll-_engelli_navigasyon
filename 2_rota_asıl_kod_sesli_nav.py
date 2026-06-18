@@ -29,8 +29,107 @@ def haversine(a, b):
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
 
-    x = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    x = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     return 2 * R * math.asin(math.sqrt(x))
+
+# =========================
+# YÖN TARİFLERİ
+# =========================
+# =========================
+# YÖN TARİFLERİ
+# =========================
+def bearing(a, b):
+    lon1 = math.radians(a[0])
+    lat1 = math.radians(a[1])
+    lon2 = math.radians(b[0])
+    lat2 = math.radians(b[1])
+
+    dlon = lon2 - lon1
+
+    x = math.sin(dlon) * math.cos(lat2)
+    y = (
+        math.cos(lat1) * math.sin(lat2)
+        - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    )
+
+    brng = math.degrees(math.atan2(x, y))
+    return (brng + 360) % 360
+
+
+def compass_direction(angle):
+
+    dirs = [
+        "Kuzey",
+        "Kuzeydoğu",
+        "Doğu",
+        "Güneydoğu",
+        "Güney",
+        "Güneybatı",
+        "Batı",
+        "Kuzeybatı"
+    ]
+
+    index = round(angle / 45) % 8
+
+    return dirs[index]
+
+
+def generate_directions(path):
+
+    if len(path) < 3:
+        return ["Varış noktasına ulaştınız"]
+
+    directions = []
+
+    # İlk yön
+    first_bearing = bearing(path[0], path[1])
+    first_direction = compass_direction(first_bearing)
+
+    directions.append(
+        f"{first_direction} yönünde ilerleyin"
+    )
+
+    segment_dist = 0
+
+    for i in range(1, len(path)-1):
+
+        segment_dist += haversine(path[i-1], path[i])
+
+        b1 = bearing(path[i-1], path[i])
+        b2 = bearing(path[i], path[i+1])
+
+        angle = b2 - b1
+
+        while angle > 180:
+            angle -= 360
+
+        while angle < -180:
+            angle += 360
+
+        if abs(angle) > 35:
+
+            directions.append(
+                f"{round(segment_dist)} metre düz ilerle"
+            )
+
+            if angle > 0:
+                directions.append("Sağa dön")
+            else:
+                directions.append("Sola dön")
+
+            segment_dist = 0
+
+    segment_dist += haversine(path[-2], path[-1])
+
+    directions.append(
+        f"{round(segment_dist)} metre düz ilerle"
+    )
+
+    directions.append("Varış noktasına ulaştınız")
+
+    return directions
+
+    return directions
 
 # =========================
 # GRAPH
@@ -40,9 +139,9 @@ edges_list = []
 
 def add_line(line):
     coords = list(line.coords)
-    for i in range(len(coords)-1):
+    for i in range(len(coords) - 1):
         a = coords[i]
-        b = coords[i+1]
+        b = coords[i + 1]
         G.add_edge(a, b, weight=haversine(a, b))
         edges_list.append((a, b))
 
@@ -52,6 +151,7 @@ for geom in gdf.geometry:
 
     if geom.geom_type == "LineString":
         add_line(geom)
+
     elif geom.geom_type == "MultiLineString":
         for line in geom:
             add_line(line)
@@ -100,7 +200,7 @@ def snap_and_insert(graph, p):
 def path_distance(path):
     dist = 0
     for i in range(1, len(path)):
-        dist += haversine(path[i-1], path[i])
+        dist += haversine(path[i - 1], path[i])
     return dist
 
 # =========================
@@ -108,10 +208,10 @@ def path_distance(path):
 # =========================
 def shortest_routes(start, end):
     if not is_valid(start):
-        return "outside", None, None, None, None
+        return "outside", None, None, None, None, None
 
     if not is_valid(end):
-        return "outside", None, None, None, None
+        return "outside", None, None, None, None, None
 
     temp_G = G.copy()
 
@@ -119,10 +219,21 @@ def shortest_routes(start, end):
     e_snap = snap_and_insert(temp_G, end)
 
     try:
-        paths = list(islice(nx.shortest_simple_paths(temp_G, s_snap, e_snap, weight="weight"), 2))
+        paths = list(
+            islice(
+                nx.shortest_simple_paths(
+                    temp_G,
+                    s_snap,
+                    e_snap,
+                    weight="weight"
+                ),
+                2
+            )
+        )
 
         path1 = paths[0]
         dist1 = path_distance(path1)
+        directions1 = generate_directions(path1)
 
         path2 = None
         dist2 = None
@@ -131,10 +242,10 @@ def shortest_routes(start, end):
             path2 = paths[1]
             dist2 = path_distance(path2)
 
-        return "ok", path1, dist1, path2, dist2
+        return "ok", path1, dist1, path2, dist2, directions1
 
     except:
-        return "fail", None, None, None, None
+        return "fail", None, None, None, None, None
 
 # =========================
 # FLASK
@@ -156,21 +267,42 @@ HTML = """
 .route-control{
     background:white;
     padding:2px;
-    border-radius:4px;
+    border-radius:2px;
     box-shadow:0 1px 3px rgba(0,0,0,0.25);
 }
 
 .route-control button{
     display:block;
-    width:48px;
-    padding:1px 2px;
+    width:24px;
+    padding:0.5px 1px;
     margin-bottom:2px;
-    font-size:7px;
+    font-size:3px;
     cursor:pointer;
 }
 
 .route-control button:last-child{
     margin-bottom:0;
+}
+
+/* Sonuç paneli */
+.result-control{
+    background:white;
+    width:50px;
+    max-height:80px;
+    overflow-y:auto;
+    padding:3px;
+    border-radius:3px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.35);
+    font-family:Arial;
+    font-size:3px;
+    display:none;
+}
+
+.result-title{
+    font-weight:bold;
+    margin-bottom:4px;
+    border-bottom:1px solid #ccc;
+    padding-bottom:3px;
 }
 
 /* + / - zoom küçültme */
@@ -189,24 +321,28 @@ HTML = """
 .leaflet-bar{
     font-size:12px !important;
 }
-
-/* popup küçültme - transform YOK, çünkü popup kayboluyordu */
-.leaflet-popup-content{
-    margin:4px 6px !important;
-    font-size:11px !important;
-    line-height:1.15 !important;
-    min-width:90px !important;
+.voice-btn{
+    font-size:3px;
+    padding:1px 2px;
+    border:1px solid #bbb;
+    border-radius:6px;
+    background:#f7f7f7;
+    cursor:pointer;
+    margin:0;
 }
 
-.leaflet-popup-content-wrapper{
-    padding:1px !important;
-    border-radius:6px !important;
+.voice-btn:hover{
+    background:#eaeaea;
 }
 
-.leaflet-popup-tip{
-    width:7px !important;
-    height:7px !important;
+.stop-btn{
+    background:#fff3f3;
 }
+
+.stop-btn:hover{
+    background:#ffe1e1;
+}
+
 </style>
 
 </head>
@@ -219,6 +355,27 @@ HTML = """
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
+function speak(text){
+    if('speechSynthesis' in window){
+        speechSynthesis.cancel();
+
+        let msg = new SpeechSynthesisUtterance(text);
+        msg.lang = "tr-TR";
+        msg.rate = 0.95;
+        msg.pitch = 1.0;
+
+        speechSynthesis.speak(msg);
+    } else {
+        alert("Bu tarayıcı sesli okuma desteklemiyor.");
+    }
+}
+
+function stopSpeak(){
+    if('speechSynthesis' in window){
+        speechSynthesis.cancel();
+    }
+}
+
 
 var map = L.map('map').setView([39.75,37.01],13);
 
@@ -233,6 +390,7 @@ var RouteControl = L.Control.extend({
         div.innerHTML = `
             <button onclick="toggleRoute1()">1. Rota</button>
             <button onclick="toggleRoute2()">2. Rota</button>
+            <button onclick="zoomToShapefile()">Zoom</button>
         `;
 
         L.DomEvent.disableClickPropagation(div);
@@ -244,27 +402,60 @@ var RouteControl = L.Control.extend({
 
 map.addControl(new RouteControl());
 
+var ResultControl = L.Control.extend({
+    options: {
+        position: 'topright'
+    },
+
+    onAdd: function(map){
+        var div = L.DomUtil.create('div', 'result-control');
+        div.id = "resultPanel";
+
+        div.innerHTML = `
+            <div class="result-title">SONUÇLAR</div>
+            <div id="resultContent"></div>
+        `;
+
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+
+        return div;
+    }
+});
+
+map.addControl(new ResultControl());
+
+var resultPanel = document.getElementById("resultPanel");
+var resultContent = document.getElementById("resultContent");
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 let pts = [];
 let markers = [];
 let line1 = null;
 let line2 = null;
-let popup = null;
 
 let lastRoute1 = null;
 let lastRoute2 = null;
 let route1Visible = true;
 let route2Visible = true;
+let shpBounds = null;
 
 fetch("/geojson")
 .then(r=>r.json())
 .then(d=>{
-    L.geoJSON(d,{
-        color:"red",
-        weight:1,
-        opacity:0.8
-    }).addTo(map);
+
+    let shpLayer = L.geoJSON(d,{
+    color:"red",
+    weight:0.5,
+    opacity:1
+}).addTo(map);
+
+shpBounds = shpLayer.getBounds();
+
+map.fitBounds(shpBounds);
+    map.fitBounds(shpLayer.getBounds());
+
 });
 
 function clearAll(){
@@ -281,17 +472,15 @@ function clearAll(){
         line2 = null;
     }
 
-    if(popup){
-        map.closePopup();
-        popup = null;
-    }
-
     lastRoute1 = null;
     lastRoute2 = null;
     route1Visible = true;
     route2Visible = true;
 
     pts = [];
+
+    resultPanel.style.display = "none";
+    resultContent.innerHTML = "";
 }
 
 function toggleRoute1(){
@@ -306,7 +495,7 @@ function toggleRoute1(){
     } else {
         line1 = L.polyline(lastRoute1,{
             color:"blue",
-            weight:3
+            weight:1
         }).addTo(map);
         route1Visible = true;
     }
@@ -324,13 +513,16 @@ function toggleRoute2(){
     } else {
         line2 = L.polyline(lastRoute2,{
             color:"green",
-            weight:2,
-            dashArray:"8,8"
+            weight:1,
         }).addTo(map);
         route2Visible = true;
     }
 }
-
+function zoomToShapefile(){
+    if(shpBounds){
+        map.fitBounds(shpBounds);
+    }
+}
 map.on('click', function(e){
 
     let p = [e.latlng.lng, e.latlng.lat];
@@ -365,10 +557,11 @@ map.on('click', function(e){
 
             line1 = L.polyline(l1,{
                 color:"blue",
-                weight:3
+                weight:1
             }).addTo(map);
 
-            let popupText = "1. rota: " + Math.round(d.distance) + " metre";
+            let html = "";
+            html += "<b>1. rota:</b> " + Math.round(d.distance) + " metre<br>";
 
             if(d.path2){
                 let l2 = d.path2.map(p=>[p[1],p[0]]);
@@ -378,23 +571,31 @@ map.on('click', function(e){
 
                 line2 = L.polyline(l2,{
                     color:"green",
-                    weight:2,
-                    dashArray:"8,8"
-                }).addTo(map);
+                    weight:1,
+                    }).addTo(map);
 
-                popupText += "<br>2. rota: " + Math.round(d.distance2) + " metre";
+                html += "<b>2. rota:</b> " + Math.round(d.distance2) + " metre<br>";
             } else {
-                popupText += "<br>2. rota bulunamadı";
+                html += "<b>2. rota:</b> bulunamadı<br>";
             }
 
-            popup = L.popup({
-                maxWidth:140,
-                minWidth:90,
-                autoPan:true
-            })
-            .setLatLng(l1[Math.floor(l1.length/2)])
-            .setContent(popupText)
-            .openOn(map);
+            html += "<hr>";
+            html += "<div style='display:flex;gap:4px;margin-bottom:6px;'>";
+html += "<button class='voice-btn' onclick='speakCurrentDirections()'>🔊 Sesli Oku</button>";
+html += "<button class='voice-btn stop-btn' onclick='stopSpeak()'>⏹ Durdur</button>";
+html += "</div>";
+
+           currentDirectionsText = "";
+
+if(d.directions){
+    d.directions.forEach(function(x){
+        html += "• " + x + "<br>";
+        currentDirectionsText += x + ". ";
+    });
+}
+
+resultContent.innerHTML = html;
+resultPanel.style.display = "block";
 
         });
 
@@ -402,6 +603,19 @@ map.on('click', function(e){
 
 });
 
+let currentDirectionsText = "";
+
+function speakCurrentDirections(){
+    if(currentDirectionsText){
+        speak(currentDirectionsText);
+    }
+}
+
+function speakCurrentDirections(){
+    if(currentDirectionsText){
+        speak(currentDirectionsText);
+    }
+}
 </script>
 
 </body>
@@ -419,14 +633,18 @@ def route():
     ex = float(request.args.get("ex"))
     ey = float(request.args.get("ey"))
 
-    status, path1, dist1, path2, dist2 = shortest_routes((sx,sy),(ex,ey))
+    status, path1, dist1, path2, dist2, directions = shortest_routes(
+        (sx, sy),
+        (ex, ey)
+    )
 
     return jsonify({
         "status": status,
         "path": path1,
         "distance": dist1,
         "path2": path2,
-        "distance2": dist2
+        "distance2": dist2,
+        "directions": directions
     })
 
 @app.route("/geojson")
