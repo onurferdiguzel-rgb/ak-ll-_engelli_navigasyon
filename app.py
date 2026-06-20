@@ -824,7 +824,6 @@ function makeResultPanelDraggable(){
         panelDragging = true;
         panelOffsetX = e.clientX - resultPanel.getBoundingClientRect().left;
         panelOffsetY = e.clientY - resultPanel.getBoundingClientRect().top;
-        resultPanel.style.position = "fixed";
         resultPanel.style.zIndex = 9999;
     });
 
