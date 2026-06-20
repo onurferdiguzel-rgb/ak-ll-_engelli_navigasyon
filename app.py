@@ -942,8 +942,11 @@ function getMyLocation(){
 resultContent.innerHTML =
     "<b>Canlı konum alındı.</b><br>Şimdi hedef noktayı seçin.";
 
-speak("Konum algılandı. Lütfen hedef noktayı seçin.");
 updateLiveNavText("Konum algılandı. Lütfen hedef noktayı seçin.");
+
+setTimeout(function(){
+    speak("Konum algılandı. Lütfen hedef noktayı seçin.");
+}, 500);
 
 resultPanel.style.display = "block";
 
