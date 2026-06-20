@@ -1430,7 +1430,11 @@ function startLiveNavigation(){
     let nav = navigationRoutes[selectedRouteIndex];
 let firstLiveText = null;
 
-if(nav && nav.carSteps && nav.carSteps.length > 0){
+if(nav && nav.carLine && nav.carLine.length > 1){
+    let firstAngle = bearingJS(nav.carLine[0], nav.carLine[1]);
+    let firstDir = compassJS(firstAngle);
+    firstLiveText = "Araç rotası başladı. " + firstDir + " yönünde ilerleyin.";
+}else if(nav && nav.carSteps && nav.carSteps.length > 0){
     firstLiveText = nav.carSteps[0].text;
 }else if(nav && nav.walkSteps && nav.walkSteps.length > 0){
     firstLiveText = nav.walkSteps[0].text;
