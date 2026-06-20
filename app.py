@@ -625,13 +625,17 @@ function unlockSpeech(){
     }
 }
 function speak(text){
+    if(!text){
+        return;
+    }
+
     if('speechSynthesis' in window){
-        speechSynthesis.cancel();
 
         let msg = new SpeechSynthesisUtterance(text);
         msg.lang = "tr-TR";
         msg.rate = 0.95;
         msg.pitch = 1.0;
+        msg.volume = 1;
 
         speechSynthesis.speak(msg);
     }
@@ -1242,10 +1246,13 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
 
         }else{
 
-            L.polyline(roadLine,{
-    color:"#000080",
-    weight:4
-}).addTo(group);
+    L.polyline([
+        [userLat,userLng],
+        [entryY,entryX]
+    ],{
+        color:"#000080",
+        weight:4
+    }).addTo(group);
 
             carLineCoords = [
                 [userLat,userLng],
@@ -1407,8 +1414,8 @@ function drawRoutes(data){
 // =========================
 function startLiveNavigation(){
 
-    if(!routeData[selectedRouteIndex]){
-        alert("Önce rota oluşturun ve rota seçin.");
+    if(!userLocation || !currentTarget){
+        alert("Önce rota oluşturun.");
         return;
     }
 
@@ -1417,38 +1424,36 @@ function startLiveNavigation(){
         watchId = null;
     }
 
+    navigationActive = true;
     spokenSteps = {};
     offRouteSpoken = false;
     rerouteInProgress = false;
-    navigationActive = true;
 
     setStatus("Canlı takip aktif");
 
     let nav = navigationRoutes[selectedRouteIndex];
-let firstLiveText = null;
+    let firstLiveText = null;
 
-if(nav && nav.carLine && nav.carLine.length > 1){
-    let firstAngle = bearingJS(nav.carLine[0], nav.carLine[1]);
-    let firstDir = compassJS(firstAngle);
-    firstLiveText = "Araç rotası başladı. " + firstDir + " yönünde ilerleyin.";
-}else if(nav && nav.carSteps && nav.carSteps.length > 0){
-    firstLiveText = nav.carSteps[0].text;
-}else if(nav && nav.walkSteps && nav.walkSteps.length > 0){
-    firstLiveText = nav.walkSteps[0].text;
-}else if(currentDirectionsList && currentDirectionsList.length > 0){
-    firstLiveText = currentDirectionsList[0];
-}
+    if(nav && nav.carLine && nav.carLine.length > 1){
+        let firstAngle = bearingJS(nav.carLine[0], nav.carLine[1]);
+        let firstDir = compassJS(firstAngle);
+        firstLiveText = "Araç rotası başladı. " + firstDir + " yönünde ilerleyin.";
+    }else if(nav && nav.walkSteps && nav.walkSteps.length > 0){
+        firstLiveText = nav.walkSteps[0].text;
+    }else if(currentDirectionsList && currentDirectionsList.length > 0){
+        firstLiveText = currentDirectionsList[0];
+    }
 
-if(firstLiveText){
-    speak(firstLiveText);
-    updateLiveNavText(firstLiveText);
-    spokenSteps["start"] = true;
-}else{
-    speak("Canlı navigasyon başlatıldı.");
-    updateLiveNavText("Canlı navigasyon başlatıldı.");
-}
+    if(firstLiveText){
+        speak(firstLiveText);
+        updateLiveNavText(firstLiveText);
+        spokenSteps["start"] = true;
+    }else{
+        speak("Canlı navigasyon başlatıldı.");
+        updateLiveNavText("Canlı navigasyon başlatıldı.");
+    }
 
-watchId = navigator.geolocation.watchPosition(function(pos){
+    watchId = navigator.geolocation.watchPosition(function(pos){
 
         let lat = pos.coords.latitude;
         let lng = pos.coords.longitude;
@@ -1499,7 +1504,6 @@ watchId = navigator.geolocation.watchPosition(function(pos){
         let bestDist = 999999;
 
         allSteps.forEach(function(step){
-
             let d = distanceMeter([lat,lng], [step.lat,step.lng]);
 
             if(d < bestDist && !spokenSteps[step._key]){
@@ -1515,19 +1519,11 @@ watchId = navigator.geolocation.watchPosition(function(pos){
             spokenSteps[bestKey] = true;
         }
 
-        // Sapma kontrolü
         let carDist = minDistanceToCoords(lat, lng, nav.carLine);
         let walkDist = minDistanceToCoords(lat, lng, nav.walkLine);
-
         let minRouteDist = Math.min(carDist, walkDist);
 
-        let tolerance = 15;
-
-        if(carDist < walkDist){
-            tolerance = 50;   // araç toleransı
-        }else{
-            tolerance = 15;   // yaya toleransı
-        }
+        let tolerance = carDist < walkDist ? 50 : 15;
 
         if(minRouteDist > tolerance && !rerouteInProgress && currentTarget){
             rerouteFromCurrentLocation();
