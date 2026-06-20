@@ -938,8 +938,6 @@ function getMyLocation(){
 resultContent.innerHTML =
     "<b>Canlı konum alındı.</b><br>Şimdi hedef noktayı seçin.";
 
-unlockSpeech();
-
 speak("Konum algılandı. Lütfen hedef noktayı seçin.");
 updateLiveNavText("Konum algılandı. Lütfen hedef noktayı seçin.");
 
@@ -1408,7 +1406,6 @@ function drawRoutes(data){
 // CANLI TAKİP
 // =========================
 function startLiveNavigation(){
-    unlockSpeech();
 
     if(!routeData[selectedRouteIndex]){
         alert("Önce rota oluşturun ve rota seçin.");
