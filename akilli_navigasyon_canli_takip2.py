@@ -794,44 +794,32 @@ function minDistanceToCoords(lat, lng, coords){
 function osrmText(step){
     let type = step.maneuver.type;
     let modifier = step.maneuver.modifier;
-    let exitNo = step.maneuver.exit;
 
     if(type == "arrive"){
-        return "Geçiş noktasına ulaştınız. Erişilebilir yaya ağına geçin.";
+        return "Araç rotasında geçiş noktasına ulaştınız. Erişilebilir yaya ağına geçin.";
     }
 
     if(type == "depart"){
         return "Araç rotası başladı. Yol üzerinde ilerleyin.";
     }
 
-    if(type == "roundabout" || type == "rotary"){
-        if(exitNo){
-            return "Döner kavşakta " + exitNo + ". çıkıştan çıkın.";
-        }
-        return "Döner kavşağa girin.";
-    }
-
     if(modifier == "right" || modifier == "slight right"){
-        return "sağa dönün";
+        return "60 metre sonra sağa dönün.";
     }
 
     if(modifier == "left" || modifier == "slight left"){
-        return "sola dönün";
-    }
-
-    if(modifier == "sharp right"){
-        return "keskin sağa dönün";
-    }
-
-    if(modifier == "sharp left"){
-        return "keskin sola dönün";
+        return "60 metre sonra sola dönün.";
     }
 
     if(modifier == "straight"){
-        return "düz devam edin";
+        return "Düz devam edin.";
     }
 
-    return "yol üzerinde ilerleyin";
+    if(type == "roundabout" || type == "rotary"){
+        return "60 metre sonra döner kavşağa girin.";
+    }
+
+    return "Araç rotasında ilerleyin.";
 }
 
 // =========================
@@ -951,12 +939,12 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
             });
 
             carSteps.push({
-    lat: s.maneuver.location[1],
-    lng: s.maneuver.location[0],
-    text: osrmText(s),
-    threshold: 100,
-    mode: "car"
-});
+                lat: entryY,
+                lng: entryX,
+                text: "Erişilebilir yaya ağına geçin.",
+                threshold: 20,
+                mode: "transition"
+            });
 
         }else{
 

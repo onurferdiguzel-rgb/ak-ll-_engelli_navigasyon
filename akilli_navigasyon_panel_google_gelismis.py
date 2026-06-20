@@ -501,21 +501,53 @@ HTML = """
     transform:scale(0.75);
     transform-origin:top left;
 }
-/* TELEFON */
-@media (max-width:768px){
 
-    .route-control button{
-        width:140px;
-        height:50px;
-        font-size:18px;
-        font-weight:bold;
-    }
-
-    ..leaflet-control-zoom{
-    transform:scale(0.75);
-    transform-origin:top left;
+.result-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-weight:bold;
+    margin-bottom:6px;
+    border-bottom:1px solid #ccc;
+    padding-bottom:4px;
 }
 
+.result-window-buttons button{
+    width:22px;
+    height:20px;
+    font-size:12px;
+    padding:0;
+    margin-left:3px;
+    cursor:pointer;
+    border:1px solid #aaa;
+    background:#f5f5f5;
+    border-radius:3px;
+}
+
+.result-minimized{
+    background:white;
+    padding:8px 10px;
+    border-radius:8px;
+    box-shadow:0 1px 5px rgba(0,0,0,0.4);
+    font-family:Arial;
+    font-size:12px;
+    font-weight:bold;
+    cursor:pointer;
+    display:none;
+}
+
+.google-btn{
+    font-size:11px;
+    padding:4px 7px;
+    border:1px solid #aaa;
+    border-radius:6px;
+    background:#eef6ff;
+    cursor:pointer;
+    margin-top:4px;
+}
+
+
+/* TELEFON */
 @media screen and (max-device-width: 900px){
 
     .route-control button{
@@ -537,6 +569,11 @@ HTML = """
     .result-control{
         width:250px !important;
         font-size:12px !important;
+    }
+
+    .result-minimized{
+        font-size:12px !important;
+        padding:7px 9px !important;
     }
 
     #map{
@@ -571,6 +608,11 @@ let navigationRoutes = [];
 let watchId = null;
 let spokenSteps = {};
 let offRouteSpoken = false;
+
+let currentTarget = null;
+let rerouteInProgress = false;
+let autoCenter = true;
+let navigationActive = false;
 
 // =========================
 // SES
@@ -639,10 +681,12 @@ var RouteControl = L.Control.extend({
         div.innerHTML = `
             <button onclick="getMyLocation()">Konumum</button>
             <button onclick="zoomToShp()">Zoom</button>
+            <button onclick="toggleAutoCenter()">Ortala</button>
             <button onclick="selectRoute(0)">1. Rota</button>
             <button onclick="selectRoute(1)">2. Rota</button>
             <button onclick="startLiveNavigation()">Başlat</button>
-            <button onclick="stopLiveNavigation()">Takibi Durdur</button>
+            <button onclick="stopLiveNavigation()">Durdur</button>
+            <button onclick="clearAllForNewRoute()">Yeni Rota</button>
         `;
 
         L.DomEvent.disableClickPropagation(div);
@@ -662,7 +706,14 @@ var ResultControl = L.Control.extend({
         div.id = "resultPanel";
 
         div.innerHTML = `
-            <div class="result-title">SONUÇLAR</div>
+            <div class="result-header">
+                <span>SONUÇLAR</span>
+                <span class="result-window-buttons">
+                    <button onclick="minimizeResultPanel()">—</button>
+                    <button onclick="maximizeResultPanel()">□</button>
+                    <button onclick="closeResultPanel()">×</button>
+                </span>
+            </div>
             <div id="resultContent"></div>
         `;
 
@@ -675,8 +726,29 @@ var ResultControl = L.Control.extend({
 
 map.addControl(new ResultControl());
 
+var MinimizedResultControl = L.Control.extend({
+    options:{position:'bottomright'},
+
+    onAdd:function(map){
+        var div = L.DomUtil.create('div','result-minimized');
+        div.id = "resultMinimized";
+        div.innerHTML = "📋 SONUÇLAR";
+        div.onclick = function(){
+            maximizeResultPanel();
+        };
+
+        L.DomEvent.disableClickPropagation(div);
+        L.DomEvent.disableScrollPropagation(div);
+
+        return div;
+    }
+});
+
+map.addControl(new MinimizedResultControl());
+
 let resultPanel = document.getElementById("resultPanel");
 let resultContent = document.getElementById("resultContent");
+let resultMinimized = document.getElementById("resultMinimized");
 
 // =========================
 // KATMANLAR
@@ -717,6 +789,80 @@ function zoomToShp(){
     }
 }
 
+function setStatus(text){
+    let el = document.getElementById("navStatus");
+    if(el){
+        el.innerHTML = text;
+    }
+}
+
+function minimizeResultPanel(){
+    if(resultPanel){
+        resultPanel.style.display = "none";
+    }
+    if(resultMinimized){
+        resultMinimized.style.display = "block";
+    }
+}
+
+function maximizeResultPanel(){
+    if(resultPanel){
+        resultPanel.style.display = "block";
+        if(resultMinimized){ resultMinimized.style.display = "none"; }
+    }
+    if(resultMinimized){
+        resultMinimized.style.display = "none";
+    }
+}
+
+function closeResultPanel(){
+    if(resultPanel){
+        resultPanel.style.display = "none";
+    }
+    if(resultMinimized){
+        resultMinimized.style.display = "none";
+    }
+}
+
+function toggleAutoCenter(){
+
+    autoCenter = !autoCenter;
+
+    if(autoCenter){
+
+        if(userLocation){
+            map.panTo([userLocation[1], userLocation[0]]);
+        }
+
+        speak("Ortala açık.");
+
+    }else{
+
+        speak("Ortala kapalı.");
+
+    }
+}
+
+function clearAllForNewRoute(){
+    stopLiveNavigation();
+
+    if(targetMarker){
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+    }
+
+    clearRoutes();
+
+    routeData = [];
+    navigationRoutes = [];
+    currentDirectionsList = [];
+    currentTarget = null;
+
+    resultContent.innerHTML = "<b>Yeni rota için hedef seçin.</b><br><div id='navStatus'>Canlı takip kapalı</div>";
+    resultPanel.style.display = "block";
+        if(resultMinimized){ resultMinimized.style.display = "none"; }
+}
+
 // =========================
 // KONUM
 // =========================
@@ -744,6 +890,7 @@ function getMyLocation(){
             "<b>Canlı konum alındı.</b><br>Şimdi hedef noktayı seçin.";
 
         resultPanel.style.display = "block";
+        if(resultMinimized){ resultMinimized.style.display = "none"; }
 
         map.setView([lat,lng],16);
 
@@ -791,32 +938,120 @@ function minDistanceToCoords(lat, lng, coords){
 // =========================
 // OSRM METİN
 // =========================
+function bearingJS(a, b){
+    let lat1 = a[0] * Math.PI / 180;
+    let lat2 = b[0] * Math.PI / 180;
+    let dLng = (b[1] - a[1]) * Math.PI / 180;
+
+    let y = Math.sin(dLng) * Math.cos(lat2);
+    let x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+
+    let brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
+}
+
+function compassJS(angle){
+    let dirs = [
+        "Kuzey",
+        "Kuzeydoğu",
+        "Doğu",
+        "Güneydoğu",
+        "Güney",
+        "Güneybatı",
+        "Batı",
+        "Kuzeybatı"
+    ];
+
+    return dirs[Math.round(angle / 45) % 8];
+}
+function openGoogleToEntry(index){
+    if(!routeData[index] || !routeData[index].entry || !userLocation){
+        alert("Bu rota için Google Haritalar giriş noktası yok.");
+        return;
+    }
+
+    let entry = routeData[index].entry;
+
+    let url =
+        "https://www.google.com/maps/dir/?api=1" +
+        "&origin=" + userLocation[1] + "," + userLocation[0] +
+        "&destination=" + entry.y + "," + entry.x +
+        "&travelmode=driving";
+
+    window.open(url, "_blank");
+}
+
+function roadNameText(step){
+    if(step.name && step.name.length > 0){
+        return " " + step.name + " üzerinde";
+    }
+    return "";
+}
+
 function osrmText(step){
     let type = step.maneuver.type;
     let modifier = step.maneuver.modifier;
     let exitNo = step.maneuver.exit;
+    let road = roadNameText(step);
 
     if(type == "arrive"){
         return "Geçiş noktasına ulaştınız. Erişilebilir yaya ağına geçin.";
     }
 
     if(type == "depart"){
-        return "Araç rotası başladı. Yol üzerinde ilerleyin.";
+        return "Araç rotası başladı." + road + " ilerleyin.";
     }
 
     if(type == "roundabout" || type == "rotary"){
         if(exitNo){
-            return "Döner kavşakta " + exitNo + ". çıkıştan çıkın.";
+            return "döner kavşakta " + exitNo + ". çıkıştan çıkın";
         }
-        return "Döner kavşağa girin.";
+        return "döner kavşağa girin";
     }
 
-    if(modifier == "right" || modifier == "slight right"){
+    if(type == "merge"){
+        return "yola katılın";
+    }
+
+    if(type == "fork"){
+        if(modifier == "right" || modifier == "slight right"){
+            return "yol ayrımında sağdan devam edin";
+        }
+        if(modifier == "left" || modifier == "slight left"){
+            return "yol ayrımında soldan devam edin";
+        }
+        return "yol ayrımından devam edin";
+    }
+
+    if(type == "continue"){
+        if(modifier == "right" || modifier == "slight right"){
+            return "hafif sağdan devam edin";
+        }
+        if(modifier == "left" || modifier == "slight left"){
+            return "hafif soldan devam edin";
+        }
+        return "düz devam edin";
+    }
+
+    if(type == "new name"){
+        return road.length > 0 ? road + " devam edin" : "yol üzerinde devam edin";
+    }
+
+    if(modifier == "right"){
         return "sağa dönün";
     }
 
-    if(modifier == "left" || modifier == "slight left"){
+    if(modifier == "left"){
         return "sola dönün";
+    }
+
+    if(modifier == "slight right"){
+        return "hafif sağa yönelin";
+    }
+
+    if(modifier == "slight left"){
+        return "hafif sola yönelin";
     }
 
     if(modifier == "sharp right"){
@@ -832,6 +1067,18 @@ function osrmText(step){
     }
 
     return "yol üzerinde ilerleyin";
+}
+
+function carInstructionText(baseText, distance){
+    if(baseText.includes("Geçiş noktasına") || baseText.includes("Araç rotası başladı")){
+        return baseText;
+    }
+
+    if(distance <= 20){
+        return "Şimdi " + baseText + ".";
+    }
+
+    return Math.round(distance) + " metre sonra " + baseText + ".";
 }
 
 // =========================
@@ -889,6 +1136,7 @@ function updateResultDirections(){
     if(route.mode == "car_plus_walk"){
         html += "Geçiş: " + route.entry_name + "<br>";
         html += "Araç: " + Math.round(route.access_distance) + " m<br>";
+        html += "<button class='google-btn' onclick='openGoogleToEntry(" + selectedRouteIndex + ")'>Google Haritalar ile girişe git</button><br>";
     }else{
         html += "Doğrudan erişilebilir ağ<br>";
     }
@@ -897,6 +1145,7 @@ function updateResultDirections(){
     html += "Toplam: " + Math.round(route.total_distance) + " m<br>";
 
     html += "<hr>";
+    html += "<div id='navStatus' style='font-weight:bold;margin-bottom:6px;color:#333;'>Canlı takip kapalı</div>";
     html += "<div style='display:flex;gap:5px;margin-bottom:8px;'>";
     html += "<button class='voice-btn' onclick='speakSelectedRoute()'>🔊 Sesli Oku</button>";
     html += "<button class='voice-btn stop-btn' onclick='stopSpeak()'>⏹ Durdur</button>";
@@ -912,6 +1161,7 @@ function updateResultDirections(){
 
     resultContent.innerHTML = html;
     resultPanel.style.display = "block";
+        if(resultMinimized){ resultMinimized.style.display = "none"; }
 }
 
 // =========================
@@ -932,6 +1182,18 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
             let roadLine = coords.map(c => [c[1], c[0]]);
 
             carLineCoords = roadLine;
+            if(roadLine.length > 1){
+    let firstAngle = bearingJS(roadLine[0], roadLine[1]);
+    let firstDir = compassJS(firstAngle);
+
+    carSteps.push({
+        lat: roadLine[0][0],
+        lng: roadLine[0][1],
+        text: firstDir + " yönünde ilerleyin.",
+        threshold: 999,
+        mode: "car"
+    });
+}
 
             L.polyline(roadLine,{
                 color:"orange",
@@ -941,22 +1203,44 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
             let steps = osrm.routes[0].legs[0].steps;
 
             steps.forEach(function(s){
-                carSteps.push({
-                    lat: s.maneuver.location[1],
-                    lng: s.maneuver.location[0],
-                    text: osrmText(s),
-                    threshold: 60,
-                    mode: "car"
-                });
+                let baseText = osrmText(s);
+
+                if(s.maneuver.type == "depart"){
+                    carSteps.push({
+                        lat: s.maneuver.location[1],
+                        lng: s.maneuver.location[0],
+                        text: baseText,
+                        threshold: 999,
+                        mode: "car"
+                    });
+                }else if(s.maneuver.type == "arrive"){
+                    carSteps.push({
+                        lat: s.maneuver.location[1],
+                        lng: s.maneuver.location[0],
+                        text: "Geçiş noktasına ulaştınız. Erişilebilir yaya ağına geçin.",
+                        threshold: 25,
+                        mode: "transition"
+                    });
+                }else{
+                    [500, 200, 100, 50, 20].forEach(function(th){
+                        carSteps.push({
+                            lat: s.maneuver.location[1],
+                            lng: s.maneuver.location[0],
+                            text: carInstructionText(baseText, th),
+                            threshold: th,
+                            mode: "car"
+                        });
+                    });
+                }
             });
 
             carSteps.push({
-    lat: s.maneuver.location[1],
-    lng: s.maneuver.location[0],
-    text: osrmText(s),
-    threshold: 100,
-    mode: "car"
-});
+                lat: entryY,
+                lng: entryX,
+                text: "Erişilebilir yaya ağına geçin.",
+                threshold: 20,
+                mode: "transition"
+            });
 
         }else{
 
@@ -1095,6 +1379,7 @@ function drawRoutes(data){
         if(route.mode == "car_plus_walk"){
             html += "Geçiş: " + route.entry_name + "<br>";
             html += "Araç: " + Math.round(route.access_distance) + " m<br>";
+            html += "<button class='google-btn' onclick='openGoogleToEntry(" + index + ")'>Google ile girişe git</button><br>";
         }else{
             html += "Doğrudan erişilebilir ağ<br>";
         }
@@ -1121,6 +1406,7 @@ function drawRoutes(data){
 
     resultContent.innerHTML = html;
     resultPanel.style.display = "block";
+        if(resultMinimized){ resultMinimized.style.display = "none"; }
 }
 
 // =========================
@@ -1140,12 +1426,17 @@ function startLiveNavigation(){
 
     spokenSteps = {};
     offRouteSpoken = false;
+    rerouteInProgress = false;
+    navigationActive = true;
+
+    setStatus("Canlı takip aktif");
 
     if(currentDirectionsList && currentDirectionsList.length > 0){
-    speak(currentDirectionsList[0]);
-}else{
-    speak("Canlı navigasyon başlatıldı.");
-}
+        speak(currentDirectionsList[0]);
+        spokenSteps["start"] = true;
+    }else{
+        speak("Canlı navigasyon başlatıldı.");
+    }
 
     watchId = navigator.geolocation.watchPosition(function(pos){
 
@@ -1165,6 +1456,10 @@ function startLiveNavigation(){
             fillOpacity:1
         }).addTo(map);
 
+        if(autoCenter){
+            map.panTo([lat,lng]);
+        }
+
         let nav = navigationRoutes[selectedRouteIndex];
 
         if(!nav){
@@ -1174,31 +1469,39 @@ function startLiveNavigation(){
         let allSteps = [];
 
         if(nav.carSteps){
-            allSteps = allSteps.concat(nav.carSteps);
+            nav.carSteps.forEach(function(s, i){
+                let c = Object.assign({}, s);
+                c._key = "car_" + i + "_" + s.threshold;
+                allSteps.push(c);
+            });
         }
 
         if(nav.walkSteps){
-            allSteps = allSteps.concat(nav.walkSteps);
+            nav.walkSteps.forEach(function(s, i){
+                let w = Object.assign({}, s);
+                w._key = "walk_" + i + "_" + s.threshold;
+                allSteps.push(w);
+            });
         }
 
         let bestStep = null;
-        let bestStepIndex = -1;
+        let bestKey = null;
         let bestDist = 999999;
 
-        allSteps.forEach(function(step, i){
+        allSteps.forEach(function(step){
 
             let d = distanceMeter([lat,lng], [step.lat,step.lng]);
 
-            if(d < bestDist && !spokenSteps[i]){
+            if(d < bestDist && !spokenSteps[step._key]){
                 bestDist = d;
                 bestStep = step;
-                bestStepIndex = i;
+                bestKey = step._key;
             }
         });
 
-        if(bestStep && bestDist <= bestStep.threshold && !spokenSteps[bestStepIndex]){
+        if(bestStep && bestDist <= bestStep.threshold && !spokenSteps[bestKey]){
             speak(bestStep.text);
-            spokenSteps[bestStepIndex] = true;
+            spokenSteps[bestKey] = true;
         }
 
         // Sapma kontrolü
@@ -1210,14 +1513,13 @@ function startLiveNavigation(){
         let tolerance = 15;
 
         if(carDist < walkDist){
-            tolerance = 50;
+            tolerance = 50;   // araç toleransı
         }else{
-            tolerance = 15;
+            tolerance = 15;   // yaya toleransı
         }
 
-        if(minRouteDist > tolerance && !offRouteSpoken){
-            speak("Rotadan çıktınız. Yeni rota hesaplanması gerekiyor.");
-            offRouteSpoken = true;
+        if(minRouteDist > tolerance && !rerouteInProgress && currentTarget){
+            rerouteFromCurrentLocation();
         }
 
     }, function(){
@@ -1226,6 +1528,48 @@ function startLiveNavigation(){
         enableHighAccuracy:true,
         maximumAge:1000,
         timeout:10000
+    });
+}
+
+function rerouteFromCurrentLocation(){
+
+    if(!userLocation || !currentTarget){
+        return;
+    }
+
+    rerouteInProgress = true;
+    offRouteSpoken = true;
+
+    speak("Rotadan çıktınız. Yeni rota hesaplanıyor.");
+    setStatus("Yeni rota hesaplanıyor...");
+
+    fetch(`/smart_route?ux=${userLocation[0]}&uy=${userLocation[1]}&tx=${currentTarget[0]}&ty=${currentTarget[1]}`)
+    .then(r=>r.json())
+    .then(d=>{
+
+        if(d.status != "ok"){
+            speak("Yeni rota bulunamadı.");
+            setStatus("Yeni rota bulunamadı");
+            rerouteInProgress = false;
+            return;
+        }
+
+        drawRoutes(d);
+        selectedRouteIndex = 0;
+        selectRoute(0);
+
+        spokenSteps = {};
+        offRouteSpoken = false;
+        rerouteInProgress = false;
+
+        setStatus("Yeni rota oluşturuldu. Canlı takip aktif.");
+        speak("Yeni rota oluşturuldu.");
+
+    })
+    .catch(()=>{
+        speak("Yeni rota hesaplanamadı.");
+        setStatus("Yeni rota hesaplanamadı");
+        rerouteInProgress = false;
     });
 }
 
@@ -1238,12 +1582,15 @@ function stopLiveNavigation(){
 
     spokenSteps = {};
     offRouteSpoken = false;
+    rerouteInProgress = false;
+    navigationActive = false;
 
     if(liveMarker){
         map.removeLayer(liveMarker);
         liveMarker = null;
     }
 
+    setStatus("Canlı takip kapalı");
     speak("Canlı takip durduruldu.");
 }
 
@@ -1258,6 +1605,7 @@ map.on('click', function(e){
     }
 
     let target = [e.latlng.lng, e.latlng.lat];
+    currentTarget = target;
 
     if(targetMarker){
         map.removeLayer(targetMarker);

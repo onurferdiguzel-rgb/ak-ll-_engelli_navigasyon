@@ -466,8 +466,8 @@ HTML = """
 .result-control{
     background:white;
     width:270px;
-    max-height:380px;
-    overflow-y:auto;
+    max-height:60vh;
+    overflow:hidden;
     padding:10px;
     border-radius:10px;
     box-shadow:0 1px 5px rgba(0,0,0,0.4);
@@ -476,11 +476,36 @@ HTML = """
     display:none;
 }
 
-.result-title{
+#resultContent{
+    height:320px;
+    overflow-y:scroll;
+    overflow-x:hidden;
+    padding-right:4px;
+    border-top:1px solid #ddd;
+}
+
+
+.result-header{
+    position:sticky;
+    top:0;
+    background:white;
+    z-index:999;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
     font-weight:bold;
-    margin-bottom:6px;
     border-bottom:1px solid #ccc;
     padding-bottom:4px;
+    margin-bottom:6px;
+}
+
+.result-header button{
+    width:22px;
+    height:20px;
+    padding:0;
+    margin-left:3px;
+    font-size:12px;
+    cursor:pointer;
 }
 
 .voice-btn{
@@ -501,21 +526,8 @@ HTML = """
     transform:scale(0.75);
     transform-origin:top left;
 }
+
 /* TELEFON */
-@media (max-width:768px){
-
-    .route-control button{
-        width:140px;
-        height:50px;
-        font-size:18px;
-        font-weight:bold;
-    }
-
-    ..leaflet-control-zoom{
-    transform:scale(0.75);
-    transform-origin:top left;
-}
-
 @media screen and (max-device-width: 900px){
 
     .route-control button{
@@ -537,6 +549,7 @@ HTML = """
     .result-control{
         width:250px !important;
         font-size:12px !important;
+        -webkit-overflow-scrolling: touch;
     }
 
     #map{
@@ -571,6 +584,11 @@ let navigationRoutes = [];
 let watchId = null;
 let spokenSteps = {};
 let offRouteSpoken = false;
+
+let currentTarget = null;
+let rerouteInProgress = false;
+let autoCenter = true;
+let navigationActive = false;
 
 // =========================
 // SES
@@ -639,15 +657,17 @@ var RouteControl = L.Control.extend({
         div.innerHTML = `
             <button onclick="getMyLocation()">Konumum</button>
             <button onclick="zoomToShp()">Zoom</button>
+            <button onclick="toggleAutoCenter()">Ortala</button>
             <button onclick="selectRoute(0)">1. Rota</button>
             <button onclick="selectRoute(1)">2. Rota</button>
             <button onclick="startLiveNavigation()">Başlat</button>
-            <button onclick="stopLiveNavigation()">Takibi Durdur</button>
+            <button onclick="stopLiveNavigation()">Durdur</button>
+            <button onclick="clearAllForNewRoute()">Yeni Rota</button>
         `;
 
         L.DomEvent.disableClickPropagation(div);
         L.DomEvent.disableScrollPropagation(div);
-
+        
         return div;
     }
 });
@@ -662,9 +682,16 @@ var ResultControl = L.Control.extend({
         div.id = "resultPanel";
 
         div.innerHTML = `
-            <div class="result-title">SONUÇLAR</div>
-            <div id="resultContent"></div>
-        `;
+    <div class="result-header">
+        <span>SONUÇLAR</span>
+        <span>
+            <button onclick="minimizeResultPanel()">—</button>
+            <button onclick="maximizeResultPanel()">□</button>
+            <button onclick="closeResultPanel()">×</button>
+        </span>
+    </div>
+    <div id="resultContent"></div>
+`;
 
         L.DomEvent.disableClickPropagation(div);
         L.DomEvent.disableScrollPropagation(div);
@@ -677,7 +704,30 @@ map.addControl(new ResultControl());
 
 let resultPanel = document.getElementById("resultPanel");
 let resultContent = document.getElementById("resultContent");
+makeResultPanelDraggable();
 
+resultContent.addEventListener("wheel", function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    resultContent.scrollTop += e.deltaY;
+}, {passive:false});
+
+let resultTouchStartY = 0;
+
+resultContent.addEventListener("touchstart", function(e){
+    resultTouchStartY = e.touches[0].clientY;
+}, {passive:true});
+
+resultContent.addEventListener("touchmove", function(e){
+    e.preventDefault();
+    e.stopPropagation();
+
+    let y = e.touches[0].clientY;
+    let diff = resultTouchStartY - y;
+
+    resultContent.scrollTop += diff;
+    resultTouchStartY = y;
+}, {passive:false});
 // =========================
 // KATMANLAR
 // =========================
@@ -715,6 +765,94 @@ function zoomToShp(){
     if(shpBounds){
         map.fitBounds(shpBounds);
     }
+}
+
+function setStatus(text){
+    let el = document.getElementById("navStatus");
+    if(el){
+        el.innerHTML = text;
+    }
+}
+
+let panelDragging = false;
+let panelOffsetX = 0;
+let panelOffsetY = 0;
+
+function makeResultPanelDraggable(){
+    let header = document.querySelector(".result-header");
+
+    header.addEventListener("mousedown", function(e){
+        panelDragging = true;
+        panelOffsetX = e.clientX - resultPanel.getBoundingClientRect().left;
+        panelOffsetY = e.clientY - resultPanel.getBoundingClientRect().top;
+        resultPanel.style.position = "fixed";
+        resultPanel.style.zIndex = 9999;
+    });
+
+    document.addEventListener("mousemove", function(e){
+        if(!panelDragging) return;
+
+        resultPanel.style.left = (e.clientX - panelOffsetX) + "px";
+        resultPanel.style.top = (e.clientY - panelOffsetY) + "px";
+        resultPanel.style.right = "auto";
+    });
+
+    document.addEventListener("mouseup", function(){
+        panelDragging = false;
+    });
+}
+
+
+function minimizeResultPanel(){
+    resultPanel.style.height = "32px";
+    resultContent.style.display = "none";
+}
+
+function maximizeResultPanel(){
+    resultPanel.style.height = "auto";
+    resultContent.style.display = "block";
+    resultPanel.style.display = "block";
+}
+
+function closeResultPanel(){
+    resultPanel.style.display = "none";
+}
+function toggleAutoCenter(){
+
+    autoCenter = !autoCenter;
+
+    if(autoCenter){
+
+        if(userLocation){
+            map.panTo([userLocation[1], userLocation[0]]);
+        }
+
+        speak("Ortala açık.");
+
+    }else{
+
+        speak("Ortala kapalı.");
+
+    }
+}
+
+function clearAllForNewRoute(){
+    stopLiveNavigation();
+
+    if(targetMarker){
+        map.removeLayer(targetMarker);
+        targetMarker = null;
+    }
+
+    clearRoutes();
+
+    routeData = [];
+    navigationRoutes = [];
+    currentDirectionsList = [];
+    currentTarget = null;
+
+    resultContent.innerHTML = "<b>Yeni rota için hedef seçin.</b><br><div id='navStatus'>Canlı takip kapalı</div>";
+    resultPanel.style.display = "block";
 }
 
 // =========================
@@ -791,6 +929,33 @@ function minDistanceToCoords(lat, lng, coords){
 // =========================
 // OSRM METİN
 // =========================
+function bearingJS(a, b){
+    let lat1 = a[0] * Math.PI / 180;
+    let lat2 = b[0] * Math.PI / 180;
+    let dLng = (b[1] - a[1]) * Math.PI / 180;
+
+    let y = Math.sin(dLng) * Math.cos(lat2);
+    let x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+
+    let brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
+}
+
+function compassJS(angle){
+    let dirs = [
+        "Kuzey",
+        "Kuzeydoğu",
+        "Doğu",
+        "Güneydoğu",
+        "Güney",
+        "Güneybatı",
+        "Batı",
+        "Kuzeybatı"
+    ];
+
+    return dirs[Math.round(angle / 45) % 8];
+}
 function osrmText(step){
     let type = step.maneuver.type;
     let modifier = step.maneuver.modifier;
@@ -806,17 +971,25 @@ function osrmText(step){
 
     if(type == "roundabout" || type == "rotary"){
         if(exitNo){
-            return "Döner kavşakta " + exitNo + ". çıkıştan çıkın.";
+            return "döner kavşakta " + exitNo + ". çıkıştan çıkın";
         }
-        return "Döner kavşağa girin.";
+        return "döner kavşağa girin";
     }
 
-    if(modifier == "right" || modifier == "slight right"){
+    if(modifier == "right"){
         return "sağa dönün";
     }
 
-    if(modifier == "left" || modifier == "slight left"){
+    if(modifier == "left"){
         return "sola dönün";
+    }
+
+    if(modifier == "slight right"){
+        return "hafif sağa yönelin";
+    }
+
+    if(modifier == "slight left"){
+        return "hafif sola yönelin";
     }
 
     if(modifier == "sharp right"){
@@ -832,6 +1005,18 @@ function osrmText(step){
     }
 
     return "yol üzerinde ilerleyin";
+}
+
+function carInstructionText(baseText, distance){
+    if(baseText.includes("Geçiş noktasına") || baseText.includes("Araç rotası başladı")){
+        return baseText;
+    }
+
+    if(distance <= 20){
+        return "Şimdi " + baseText + ".";
+    }
+
+    return Math.round(distance) + " metre sonra " + baseText + ".";
 }
 
 // =========================
@@ -897,6 +1082,7 @@ function updateResultDirections(){
     html += "Toplam: " + Math.round(route.total_distance) + " m<br>";
 
     html += "<hr>";
+    html += "<div id='navStatus' style='font-weight:bold;margin-bottom:6px;color:#333;'>Canlı takip kapalı</div>";
     html += "<div style='display:flex;gap:5px;margin-bottom:8px;'>";
     html += "<button class='voice-btn' onclick='speakSelectedRoute()'>🔊 Sesli Oku</button>";
     html += "<button class='voice-btn stop-btn' onclick='stopSpeak()'>⏹ Durdur</button>";
@@ -932,6 +1118,18 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
             let roadLine = coords.map(c => [c[1], c[0]]);
 
             carLineCoords = roadLine;
+            if(roadLine.length > 1){
+    let firstAngle = bearingJS(roadLine[0], roadLine[1]);
+    let firstDir = compassJS(firstAngle);
+
+    carSteps.push({
+        lat: roadLine[0][0],
+        lng: roadLine[0][1],
+        text: firstDir + " yönünde ilerleyin.",
+        threshold: 999,
+        mode: "car"
+    });
+}
 
             L.polyline(roadLine,{
                 color:"orange",
@@ -941,22 +1139,44 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
             let steps = osrm.routes[0].legs[0].steps;
 
             steps.forEach(function(s){
-                carSteps.push({
-                    lat: s.maneuver.location[1],
-                    lng: s.maneuver.location[0],
-                    text: osrmText(s),
-                    threshold: 60,
-                    mode: "car"
-                });
+                let baseText = osrmText(s);
+
+                if(s.maneuver.type == "depart"){
+                    carSteps.push({
+                        lat: s.maneuver.location[1],
+                        lng: s.maneuver.location[0],
+                        text: baseText,
+                        threshold: 999,
+                        mode: "car"
+                    });
+                }else if(s.maneuver.type == "arrive"){
+                    carSteps.push({
+                        lat: s.maneuver.location[1],
+                        lng: s.maneuver.location[0],
+                        text: "Geçiş noktasına ulaştınız. Erişilebilir yaya ağına geçin.",
+                        threshold: 25,
+                        mode: "transition"
+                    });
+                }else{
+                    [500, 200, 100, 50, 20].forEach(function(th){
+                        carSteps.push({
+                            lat: s.maneuver.location[1],
+                            lng: s.maneuver.location[0],
+                            text: carInstructionText(baseText, th),
+                            threshold: th,
+                            mode: "car"
+                        });
+                    });
+                }
             });
 
             carSteps.push({
-    lat: s.maneuver.location[1],
-    lng: s.maneuver.location[0],
-    text: osrmText(s),
-    threshold: 100,
-    mode: "car"
-});
+                lat: entryY,
+                lng: entryX,
+                text: "Erişilebilir yaya ağına geçin.",
+                threshold: 20,
+                mode: "transition"
+            });
 
         }else{
 
@@ -1140,12 +1360,17 @@ function startLiveNavigation(){
 
     spokenSteps = {};
     offRouteSpoken = false;
+    rerouteInProgress = false;
+    navigationActive = true;
+
+    setStatus("Canlı takip aktif");
 
     if(currentDirectionsList && currentDirectionsList.length > 0){
-    speak(currentDirectionsList[0]);
-}else{
-    speak("Canlı navigasyon başlatıldı.");
-}
+        speak(currentDirectionsList[0]);
+        spokenSteps["start"] = true;
+    }else{
+        speak("Canlı navigasyon başlatıldı.");
+    }
 
     watchId = navigator.geolocation.watchPosition(function(pos){
 
@@ -1165,6 +1390,10 @@ function startLiveNavigation(){
             fillOpacity:1
         }).addTo(map);
 
+        if(autoCenter){
+            map.panTo([lat,lng]);
+        }
+
         let nav = navigationRoutes[selectedRouteIndex];
 
         if(!nav){
@@ -1174,31 +1403,39 @@ function startLiveNavigation(){
         let allSteps = [];
 
         if(nav.carSteps){
-            allSteps = allSteps.concat(nav.carSteps);
+            nav.carSteps.forEach(function(s, i){
+                let c = Object.assign({}, s);
+                c._key = "car_" + i + "_" + s.threshold;
+                allSteps.push(c);
+            });
         }
 
         if(nav.walkSteps){
-            allSteps = allSteps.concat(nav.walkSteps);
+            nav.walkSteps.forEach(function(s, i){
+                let w = Object.assign({}, s);
+                w._key = "walk_" + i + "_" + s.threshold;
+                allSteps.push(w);
+            });
         }
 
         let bestStep = null;
-        let bestStepIndex = -1;
+        let bestKey = null;
         let bestDist = 999999;
 
-        allSteps.forEach(function(step, i){
+        allSteps.forEach(function(step){
 
             let d = distanceMeter([lat,lng], [step.lat,step.lng]);
 
-            if(d < bestDist && !spokenSteps[i]){
+            if(d < bestDist && !spokenSteps[step._key]){
                 bestDist = d;
                 bestStep = step;
-                bestStepIndex = i;
+                bestKey = step._key;
             }
         });
 
-        if(bestStep && bestDist <= bestStep.threshold && !spokenSteps[bestStepIndex]){
+        if(bestStep && bestDist <= bestStep.threshold && !spokenSteps[bestKey]){
             speak(bestStep.text);
-            spokenSteps[bestStepIndex] = true;
+            spokenSteps[bestKey] = true;
         }
 
         // Sapma kontrolü
@@ -1210,14 +1447,13 @@ function startLiveNavigation(){
         let tolerance = 15;
 
         if(carDist < walkDist){
-            tolerance = 50;
+            tolerance = 50;   // araç toleransı
         }else{
-            tolerance = 15;
+            tolerance = 15;   // yaya toleransı
         }
 
-        if(minRouteDist > tolerance && !offRouteSpoken){
-            speak("Rotadan çıktınız. Yeni rota hesaplanması gerekiyor.");
-            offRouteSpoken = true;
+        if(minRouteDist > tolerance && !rerouteInProgress && currentTarget){
+            rerouteFromCurrentLocation();
         }
 
     }, function(){
@@ -1226,6 +1462,48 @@ function startLiveNavigation(){
         enableHighAccuracy:true,
         maximumAge:1000,
         timeout:10000
+    });
+}
+
+function rerouteFromCurrentLocation(){
+
+    if(!userLocation || !currentTarget){
+        return;
+    }
+
+    rerouteInProgress = true;
+    offRouteSpoken = true;
+
+    speak("Rotadan çıktınız. Yeni rota hesaplanıyor.");
+    setStatus("Yeni rota hesaplanıyor...");
+
+    fetch(`/smart_route?ux=${userLocation[0]}&uy=${userLocation[1]}&tx=${currentTarget[0]}&ty=${currentTarget[1]}`)
+    .then(r=>r.json())
+    .then(d=>{
+
+        if(d.status != "ok"){
+            speak("Yeni rota bulunamadı.");
+            setStatus("Yeni rota bulunamadı");
+            rerouteInProgress = false;
+            return;
+        }
+
+        drawRoutes(d);
+        selectedRouteIndex = 0;
+        selectRoute(0);
+
+        spokenSteps = {};
+        offRouteSpoken = false;
+        rerouteInProgress = false;
+
+        setStatus("Yeni rota oluşturuldu. Canlı takip aktif.");
+        speak("Yeni rota oluşturuldu.");
+
+    })
+    .catch(()=>{
+        speak("Yeni rota hesaplanamadı.");
+        setStatus("Yeni rota hesaplanamadı");
+        rerouteInProgress = false;
     });
 }
 
@@ -1238,12 +1516,15 @@ function stopLiveNavigation(){
 
     spokenSteps = {};
     offRouteSpoken = false;
+    rerouteInProgress = false;
+    navigationActive = false;
 
     if(liveMarker){
         map.removeLayer(liveMarker);
         liveMarker = null;
     }
 
+    setStatus("Canlı takip kapalı");
     speak("Canlı takip durduruldu.");
 }
 
@@ -1258,6 +1539,7 @@ map.on('click', function(e){
     }
 
     let target = [e.latlng.lng, e.latlng.lat];
+    currentTarget = target;
 
     if(targetMarker){
         map.removeLayer(targetMarker);
