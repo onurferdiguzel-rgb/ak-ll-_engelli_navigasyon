@@ -821,11 +821,18 @@ function makeResultPanelDraggable(){
     let header = document.querySelector(".result-header");
 
     header.addEventListener("mousedown", function(e){
-        panelDragging = true;
-        panelOffsetX = e.clientX - resultPanel.getBoundingClientRect().left;
-        panelOffsetY = e.clientY - resultPanel.getBoundingClientRect().top;
-        resultPanel.style.zIndex = 9999;
-    });
+
+    if(window.innerWidth < 900){
+        return;
+    }
+
+    panelDragging = true;
+    panelOffsetX = e.clientX - resultPanel.getBoundingClientRect().left;
+    panelOffsetY = e.clientY - resultPanel.getBoundingClientRect().top;
+
+    resultPanel.style.position = "fixed";
+    resultPanel.style.zIndex = 9999;
+});
 
     document.addEventListener("mousemove", function(e){
         if(!panelDragging) return;
@@ -919,6 +926,9 @@ function getMyLocation(){
 
         resultContent.innerHTML =
             "<b>Canlı konum alındı.</b><br>Şimdi hedef noktayı seçin.";
+            
+            speak("Konum algılandı. Lütfen hedef noktayı seçin.");
+updateLiveNavText("Konum algılandı. Lütfen hedef noktayı seçin.");
 
         resultPanel.style.display = "block";
 
@@ -1167,14 +1177,14 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
     carSteps.push({
         lat: roadLine[0][0],
         lng: roadLine[0][1],
-        text: firstDir + " yönünde ilerleyin.",
+        text: "Araç rotası başladı. " + firstDir + " yönünde ilerleyin.",
         threshold: 999,
         mode: "car"
     });
 }
 
             L.polyline(roadLine,{
-                color:"orange",
+                color:"#000080",
                 weight:3
             }).addTo(group);
 
@@ -1222,13 +1232,10 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
 
         }else{
 
-            L.polyline([
-                [userLat,userLng],
-                [entryY,entryX]
-            ],{
-                color:"orange",
-                weight:3
-            }).addTo(group);
+            L.polyline(roadLine,{
+    color:"#000080",
+    weight:4
+}).addTo(group);
 
             carLineCoords = [
                 [userLat,userLng],
@@ -1252,12 +1259,12 @@ function drawOSRM(userLng, userLat, entryX, entryY, group, routeIndex, callback)
     .catch(()=>{
 
         L.polyline([
-            [userLat,userLng],
-            [entryY,entryX]
-        ],{
-            color:"orange",
-            weight:3
-        }).addTo(group);
+    [userLat,userLng],
+    [entryY,entryX]
+],{
+    color:"#000080",
+    weight:4
+}).addTo(group);
 
         navigationRoutes[routeIndex].carSteps = [{
             lat: entryY,
@@ -1323,7 +1330,7 @@ function drawRoutes(data){
             L.circleMarker([route.entry.y, route.entry.x],{
                 radius:5,
                 color:"black",
-                fillColor:"orange",
+                fillColor:"#000080",
                 fillOpacity:1
             }).addTo(group);
         }
@@ -1407,16 +1414,27 @@ function startLiveNavigation(){
 
     setStatus("Canlı takip aktif");
 
-    if(currentDirectionsList && currentDirectionsList.length > 0){
-        speak(currentDirectionsList[0]);
-        updateLiveNavText(currentDirectionsList[0]);
-        spokenSteps["start"] = true;
-    }else{
-        speak("Canlı navigasyon başlatıldı.");
-        updateLiveNavText("Canlı navigasyon başlatıldı.");
-    }
+    let nav = navigationRoutes[selectedRouteIndex];
+let firstLiveText = null;
 
-    watchId = navigator.geolocation.watchPosition(function(pos){
+if(nav && nav.carSteps && nav.carSteps.length > 0){
+    firstLiveText = nav.carSteps[0].text;
+}else if(nav && nav.walkSteps && nav.walkSteps.length > 0){
+    firstLiveText = nav.walkSteps[0].text;
+}else if(currentDirectionsList && currentDirectionsList.length > 0){
+    firstLiveText = currentDirectionsList[0];
+}
+
+if(firstLiveText){
+    speak(firstLiveText);
+    updateLiveNavText(firstLiveText);
+    spokenSteps["start"] = true;
+}else{
+    speak("Canlı navigasyon başlatıldı.");
+    updateLiveNavText("Canlı navigasyon başlatıldı.");
+}
+
+watchId = navigator.geolocation.watchPosition(function(pos){
 
         let lat = pos.coords.latitude;
         let lng = pos.coords.longitude;
