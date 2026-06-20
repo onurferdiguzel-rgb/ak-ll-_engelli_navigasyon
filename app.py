@@ -932,7 +932,7 @@ function getMyLocation(){
             map.removeLayer(userMarker);
         }
 
-        uuserMarker = L.marker([lat,lng]).addTo(map)
+        userMarker = L.marker([lat,lng]).addTo(map)
     .bindPopup("Canlı konum").openPopup();
 
 resultContent.innerHTML =
@@ -1438,7 +1438,11 @@ if(nav && nav.carSteps && nav.carSteps.length > 0){
     firstLiveText = currentDirectionsList[0];
 }
 
-else{
+if(firstLiveText){
+    speak(firstLiveText);
+    updateLiveNavText(firstLiveText);
+    spokenSteps["start"] = true;
+}else{
     speak("Canlı navigasyon başlatıldı.");
     updateLiveNavText("Canlı navigasyon başlatıldı.");
 }

@@ -613,6 +613,17 @@ let navigationActive = false;
 // =========================
 // SES
 // =========================
+let speechUnlocked = false;
+
+function unlockSpeech(){
+    if('speechSynthesis' in window && !speechUnlocked){
+        let msg = new SpeechSynthesisUtterance(" ");
+        msg.lang = "tr-TR";
+        msg.volume = 0;
+        speechSynthesis.speak(msg);
+        speechUnlocked = true;
+    }
+}
 function speak(text){
     if('speechSynthesis' in window){
         speechSynthesis.cancel();
@@ -921,19 +932,20 @@ function getMyLocation(){
             map.removeLayer(userMarker);
         }
 
-        userMarker = L.marker([lat,lng]).addTo(map)
-            .bindPopup("Canlı konum").openPopup();
+        uuserMarker = L.marker([lat,lng]).addTo(map)
+    .bindPopup("Canlı konum").openPopup();
 
-        resultContent.innerHTML =
-            "<b>Canlı konum alındı.</b><br>Şimdi hedef noktayı seçin.";
-            
-            speak("Konum algılandı. Lütfen hedef noktayı seçin.");
+resultContent.innerHTML =
+    "<b>Canlı konum alındı.</b><br>Şimdi hedef noktayı seçin.";
+
+unlockSpeech();
+
+speak("Konum algılandı. Lütfen hedef noktayı seçin.");
 updateLiveNavText("Konum algılandı. Lütfen hedef noktayı seçin.");
 
-        resultPanel.style.display = "block";
+resultPanel.style.display = "block";
 
-        map.setView([lat,lng],16);
-
+map.setView([lat,lng],16);
     }, function(){
         alert("Konum alınamadı. Tarayıcıdan izin verin.");
     });
@@ -1396,6 +1408,7 @@ function drawRoutes(data){
 // CANLI TAKİP
 // =========================
 function startLiveNavigation(){
+    unlockSpeech();
 
     if(!routeData[selectedRouteIndex]){
         alert("Önce rota oluşturun ve rota seçin.");
@@ -1425,11 +1438,7 @@ if(nav && nav.carSteps && nav.carSteps.length > 0){
     firstLiveText = currentDirectionsList[0];
 }
 
-if(firstLiveText){
-    speak(firstLiveText);
-    updateLiveNavText(firstLiveText);
-    spokenSteps["start"] = true;
-}else{
+else{
     speak("Canlı navigasyon başlatıldı.");
     updateLiveNavText("Canlı navigasyon başlatıldı.");
 }
